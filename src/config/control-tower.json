@@ -1,7 +1,13 @@
 {
   "agents": {
     "enabled": ["claude", "claude-code", "codex", "gpt"],
-    "disabled": ["cursor"]
+    "disabled": ["cursor"],
+    "roles": {
+      "control-tower": "claude-code",
+      "patch-executor": "codex",
+      "secondary-reviewer": ["claude", "gpt"],
+      "designer": "cursor"
+    }
   },
   "routing": {
     "defaultMode": "single-best",
@@ -11,6 +17,11 @@
       "analysis": { "preferred": ["claude", "gpt"] },
       "creative": { "preferred": ["gpt", "claude"] },
       "general":  { "preferred": ["claude", "gpt"] }
+    },
+    "issueRouting": {
+      "smallPatch":     "codex",
+      "complexChange":  "claude-code",
+      "investigateOnly":["claude", "gpt"]
     }
   },
   "evaluation": {
@@ -34,5 +45,23 @@
     "monthly": {
       "total": 50.00
     }
+  },
+  "n8n": {
+    "webhookPort": 3000,
+    "webhookSecret": "${WEBHOOK_SECRET}",
+    "flows": {
+      "alertToIssue":   "src/n8n/workflows/alert-to-issue.workflow.json",
+      "codexPatch":     "src/n8n/workflows/codex-patch.workflow.json",
+      "manualTask":     "src/n8n/workflows/manual-task.workflow.json"
+    }
+  },
+  "issueQueue": {
+    "persistPath": "./issue-queue.json",
+    "cooldownMs": 300000,
+    "maxRetries": 3
+  },
+  "observability": {
+    "recentLogLines": 20,
+    "alertSeverityThreshold": "low"
   }
 }

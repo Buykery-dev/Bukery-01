@@ -3,5 +3,6 @@ dist/
 .env
 *.env.local
 cost-ledger.json
+issue-queue.json
 *.log
 .DS_Store

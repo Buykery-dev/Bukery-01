@@ -1,0 +1,105 @@
+{
+  "name": "Bukery: OpenClo Alert → Issue + Telegram",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "openclo-alert",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-openclo",
+      "name": "OpenClo Alert Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.CONTROL_TOWER_URL }}/webhook/alert",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "X-Webhook-Secret", "value": "={{ $env.WEBHOOK_SECRET }}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": { "timeout": 10000 }
+      },
+      "id": "forward-to-tower",
+      "name": "Forward to Control Tower",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [480, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.severity }}",
+              "operation": "equals",
+              "value2": "critical"
+            }
+          ]
+        }
+      },
+      "id": "severity-check",
+      "name": "Is Critical?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [720, 300]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $env.TELEGRAM_ALERT_CHAT_ID }}",
+        "text": "🚨 *CRITICAL ALERT*\n\nService: `{{ $('OpenClo Alert Webhook').item.json.serviceName }}`\nFingerprint: `{{ $json.fingerprint }}`\nSeverity: `critical`\n\n_Control Tower is analysing..._",
+        "additionalFields": {
+          "parse_mode": "MarkdownV2",
+          "disable_web_page_preview": true
+        }
+      },
+      "id": "telegram-critical",
+      "name": "Telegram: Critical Alert",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [960, 200],
+      "credentials": { "telegramApi": { "id": "1", "name": "Telegram Bot" } }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={ \"status\": \"queued\" }"
+      },
+      "id": "respond-ok",
+      "name": "Respond 202",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [960, 400]
+    }
+  ],
+  "connections": {
+    "OpenClo Alert Webhook": {
+      "main": [[ { "node": "Forward to Control Tower", "type": "main", "index": 0 } ]]
+    },
+    "Forward to Control Tower": {
+      "main": [[ { "node": "Is Critical?", "type": "main", "index": 0 } ]]
+    },
+    "Is Critical?": {
+      "main": [
+        [ { "node": "Telegram: Critical Alert", "type": "main", "index": 0 } ],
+        [ { "node": "Respond 202", "type": "main", "index": 0 } ]
+      ]
+    },
+    "Telegram: Critical Alert": {
+      "main": [[ { "node": "Respond 202", "type": "main", "index": 0 } ]]
+    }
+  },
+  "settings": { "executionOrder": "v1" },
+  "staticData": null,
+  "tags": ["bukery", "monitoring", "openclo"]
+}

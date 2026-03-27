@@ -12,15 +12,24 @@ const EnvSchema = z.object({
   CURSOR_API_KEY: z.string().optional(),
   LOG_LEVEL: z.enum(['trace', 'debug', 'info', 'warn', 'error']).default('info'),
   COST_LEDGER_PATH: z.string().default('./cost-ledger.json'),
+  WEBHOOK_SECRET: z.string().optional(),
+  WEBHOOK_PORT: z.coerce.number().default(3000),
 });
 
 export type Env = z.infer<typeof EnvSchema>;
 
 interface TowerConfig {
-  agents: { enabled: AgentId[]; disabled: AgentId[] };
+  agents: {
+    enabled: AgentId[];
+    disabled: AgentId[];
+    roles?: Record<string, string | string[]>;
+  };
   routing: { defaultMode: string; maxConcurrent: number };
   evaluation: { weights: EvaluationWeights };
   budgets: BudgetConfig;
+  n8n?: { webhookPort?: number; webhookSecret?: string };
+  issueQueue: { persistPath: string; cooldownMs: number; maxRetries: number };
+  observability: { recentLogLines: number; alertSeverityThreshold: string };
 }
 
 export interface AppConfig {
@@ -30,18 +39,15 @@ export interface AppConfig {
 }
 
 export function loadConfig(): AppConfig {
-  // Validate environment
   const envResult = EnvSchema.safeParse(process.env);
   if (!envResult.success) {
-    const issues = envResult.error.issues.map((i) => `  ${i.path.join('.')}: ${i.message}`).join('\n');
-    throw new Error(`Environment validation failed:\n${issues}`);
+    const msgs = envResult.error.issues.map((i) => `  ${i.path.join('.')}: ${i.message}`).join('\n');
+    throw new Error(`Environment validation failed:\n${msgs}`);
   }
 
-  // Load control tower JSON config
   const towerPath = new URL('../../src/config/control-tower.json', import.meta.url).pathname;
   const tower = JSON.parse(fs.readFileSync(towerPath, 'utf-8')) as TowerConfig;
 
-  // Resolve openclaw.json path (project root)
   const openclawPath = path.resolve(process.cwd(), 'openclaw.json');
 
   return { env: envResult.data, tower, openclawPath };

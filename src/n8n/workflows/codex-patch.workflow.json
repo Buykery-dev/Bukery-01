@@ -1,0 +1,137 @@
+{
+  "name": "Bukery: Codex Patch → Review → PR → Deploy",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "codex-patch-request",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-patch",
+      "name": "Patch Request Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.CONTROL_TOWER_URL }}/webhook/codex-patch",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": { "timeout": 120000 }
+      },
+      "id": "request-codex-patch",
+      "name": "Request Codex Patch",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [480, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.CONTROL_TOWER_URL }}/webhook/claude-code-review",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ issueId: $json.issueId, patchDiff: $json.patchDiff }) }}",
+        "options": { "timeout": 60000 }
+      },
+      "id": "claude-code-review",
+      "name": "Claude Code Review",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [720, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.approved }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "review-approved",
+      "name": "Review Approved?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [960, 300]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $env.TELEGRAM_ALERT_CHAT_ID }}",
+        "text": "✅ *Patch Ready for Review*\n\nIssue: `{{ $('Patch Request Webhook').item.json.issueId }}`\n\n*Claude Code says:* {{ $('Claude Code Review').item.json.comments }}\n\nPR: {{ $('Request Codex Patch').item.json.prUrl }}\n\n_Approve to merge and deploy\\._",
+        "additionalFields": {
+          "parse_mode": "MarkdownV2",
+          "reply_markup": {
+            "inline_keyboard": [
+              [
+                { "text": "✅ Approve & Merge", "callback_data": "={{ 'approve:' + $('Patch Request Webhook').item.json.issueId }}" },
+                { "text": "❌ Reject", "callback_data": "={{ 'reject:' + $('Patch Request Webhook').item.json.issueId }}" }
+              ]
+            ]
+          }
+        }
+      },
+      "id": "telegram-patch-ready",
+      "name": "Telegram: Patch Ready",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [1200, 200],
+      "credentials": { "telegramApi": { "id": "1", "name": "Telegram Bot" } }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $env.TELEGRAM_ALERT_CHAT_ID }}",
+        "text": "⚠️ *Patch Needs Revision*\n\nIssue: `{{ $('Patch Request Webhook').item.json.issueId }}`\n\n*Review comments:* {{ $('Claude Code Review').item.json.comments }}\n\n_Codex will be asked to revise\\._",
+        "additionalFields": { "parse_mode": "MarkdownV2" }
+      },
+      "id": "telegram-patch-rejected",
+      "name": "Telegram: Revision Needed",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [1200, 400],
+      "credentials": { "telegramApi": { "id": "1", "name": "Telegram Bot" } }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={ \"status\": \"processing\" }"
+      },
+      "id": "respond-ok",
+      "name": "Respond 202",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [480, 500]
+    }
+  ],
+  "connections": {
+    "Patch Request Webhook": {
+      "main": [
+        [
+          { "node": "Request Codex Patch", "type": "main", "index": 0 },
+          { "node": "Respond 202", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Request Codex Patch": {
+      "main": [[ { "node": "Claude Code Review", "type": "main", "index": 0 } ]]
+    },
+    "Claude Code Review": {
+      "main": [[ { "node": "Review Approved?", "type": "main", "index": 0 } ]]
+    },
+    "Review Approved?": {
+      "main": [
+        [ { "node": "Telegram: Patch Ready", "type": "main", "index": 0 } ],
+        [ { "node": "Telegram: Revision Needed", "type": "main", "index": 0 } ]
+      ]
+    }
+  },
+  "settings": { "executionOrder": "v1" },
+  "staticData": null,
+  "tags": ["bukery", "codex", "patch", "review"]
+}
