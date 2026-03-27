@@ -1,0 +1,38 @@
+{
+  "agents": {
+    "enabled": ["claude", "claude-code", "codex", "gpt"],
+    "disabled": ["cursor"]
+  },
+  "routing": {
+    "defaultMode": "single-best",
+    "maxConcurrent": 3,
+    "taskTypeOverrides": {
+      "code":     { "preferred": ["claude-code", "codex", "gpt"] },
+      "analysis": { "preferred": ["claude", "gpt"] },
+      "creative": { "preferred": ["gpt", "claude"] },
+      "general":  { "preferred": ["claude", "gpt"] }
+    }
+  },
+  "evaluation": {
+    "weights": {
+      "completeness": 0.4,
+      "clarity": 0.3,
+      "length": 0.15,
+      "latency": 0.15
+    }
+  },
+  "budgets": {
+    "daily": {
+      "total": 5.00,
+      "perAgent": {
+        "gpt": 2.00,
+        "codex": 1.00,
+        "claude": 2.00,
+        "claude-code": 2.00
+      }
+    },
+    "monthly": {
+      "total": 50.00
+    }
+  }
+}
