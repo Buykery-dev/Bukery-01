@@ -106,7 +106,7 @@ export class TelegramGateway {
     const parsed = this.parseCommand(text);
     const task = this.controlTower.buildTask(parsed.prompt, {
       executionMode: parsed.executionMode,
-      taskType: parsed.taskType,
+      type: parsed.taskType,
       preferredAgents: parsed.preferredAgents,
       telegramChatId: chatId,
       telegramMessageId: messageId,

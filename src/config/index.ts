@@ -45,7 +45,7 @@ export function loadConfig(): AppConfig {
     throw new Error(`Environment validation failed:\n${msgs}`);
   }
 
-  const towerPath = new URL('../../src/config/control-tower.json', import.meta.url).pathname;
+  const towerPath = path.resolve(path.dirname(new URL(import.meta.url).pathname), 'control-tower.json');
   const tower = JSON.parse(fs.readFileSync(towerPath, 'utf-8')) as TowerConfig;
 
   const openclawPath = path.resolve(process.cwd(), 'openclaw.json');

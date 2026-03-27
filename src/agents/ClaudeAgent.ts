@@ -62,7 +62,12 @@ export class ClaudeAgent extends BaseAgent {
   async isAvailable(): Promise<boolean> {
     if (!process.env.ANTHROPIC_API_KEY) return false;
     try {
-      await this.client.models.list();
+      // Minimal check: attempt a tiny message to verify the key is valid
+      await this.client.messages.create({
+        model: this.metadata.model,
+        max_tokens: 1,
+        messages: [{ role: 'user', content: 'hi' }],
+      });
       return true;
     } catch {
       return false;

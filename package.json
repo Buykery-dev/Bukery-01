@@ -2,6 +2,7 @@
   "name": "bukery-control-tower",
   "version": "1.0.0",
   "description": "Control Tower — AI orchestrator for Claude, Claude Code, Codex, GPT, and Cursor",
+  "type": "module",
   "main": "dist/index.js",
   "scripts": {
     "dev": "tsx watch src/index.ts",

@@ -83,7 +83,11 @@ export class ClaudeCodeAgent extends BaseAgent {
   async isAvailable(): Promise<boolean> {
     if (!process.env.ANTHROPIC_API_KEY) return false;
     try {
-      await this.client.models.list();
+      await this.client.messages.create({
+        model: this.metadata.model,
+        max_tokens: 1,
+        messages: [{ role: 'user', content: 'hi' }],
+      });
       return true;
     } catch {
       return false;
