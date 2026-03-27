@@ -4,7 +4,6 @@ import { fingerprint, classifySeverity } from '../monitor/ErrorFingerprint.js';
 import { IssueQueue } from '../queue/IssueQueue.js';
 import { DecisionEngine } from '../core/DecisionEngine.js';
 import { TelegramFormatter } from '../gateway/TelegramFormatter.js';
-import { N8nClient } from '../n8n/N8nClient.js';
 import { CoworkDelegator } from '../cowork/CoworkDelegator.js';
 import { logger } from '../utils/logger.js';
 import TelegramBot from 'node-telegram-bot-api';
@@ -23,7 +22,6 @@ export class AlertIngestFlow {
     private decisionEngine: DecisionEngine,
     private formatter: TelegramFormatter,
     private bot: TelegramBot,
-    private n8nClient: N8nClient,
     private alertChatId: number,
   ) {}
 

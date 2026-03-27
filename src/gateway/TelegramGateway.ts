@@ -6,7 +6,7 @@ import { TelegramFormatter } from './TelegramFormatter.js';
 import { CallbackQueryHandler } from './CallbackQueryHandler.js';
 import type { IssueQueue } from '../queue/IssueQueue.js';
 import type { DecisionEngine } from '../core/DecisionEngine.js';
-import type { N8nClient } from '../n8n/N8nClient.js';
+import type { PatchFlow } from '../flows/PatchFlow.js';
 import { logger } from '../utils/logger.js';
 
 interface OpenclawConfig {
@@ -27,7 +27,7 @@ interface ParsedCommand {
 export interface TelegramGatewayDeps {
   issueQueue: IssueQueue;
   decisionEngine: DecisionEngine;
-  n8nClient: N8nClient;
+  patchFlow: PatchFlow;
 }
 
 export class TelegramGateway {
@@ -47,13 +47,12 @@ export class TelegramGateway {
     this.controlTower = controlTower;
     this.formatter = new TelegramFormatter();
 
-    // Register inline keyboard button handler if deps provided
     if (deps) {
       const callbackHandler = new CallbackQueryHandler(
         this.bot,
         deps.issueQueue,
         deps.decisionEngine,
-        deps.n8nClient,
+        deps.patchFlow,
       );
       callbackHandler.register();
     }

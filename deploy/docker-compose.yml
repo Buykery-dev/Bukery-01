@@ -1,14 +1,13 @@
 version: '3.9'
 
 services:
-  # ── Control Tower (이 앱) ─────────────────────────────────────────────────
+  # ── Control Tower ──────────────────────────────────────────────────────────
   tower:
     build: ..
     restart: unless-stopped
     env_file: ../.env
     environment:
       NODE_ENV: production
-      LOG_PATH: /var/log/bukery/app.log
     ports:
       - "3000:3000"
     volumes:
@@ -19,28 +18,6 @@ services:
       interval: 30s
       timeout: 5s
       retries: 3
-    depends_on:
-      - n8n
-    networks:
-      - bukery
-
-  # ── n8n 워크플로우 자동화 ──────────────────────────────────────────────────
-  n8n:
-    image: n8nio/n8n:latest
-    restart: unless-stopped
-    environment:
-      N8N_BASIC_AUTH_ACTIVE: "true"
-      N8N_BASIC_AUTH_USER: ${N8N_USER:-admin}
-      N8N_BASIC_AUTH_PASSWORD: ${N8N_PASSWORD}
-      N8N_HOST: ${N8N_HOST:-localhost}
-      N8N_PORT: 5678
-      N8N_PROTOCOL: https
-      WEBHOOK_URL: https://${N8N_HOST}/
-      GENERIC_TIMEZONE: Asia/Seoul
-    ports:
-      - "5678:5678"
-    volumes:
-      - n8n-data:/home/node/.n8n
     networks:
       - bukery
 
@@ -60,7 +37,8 @@ services:
     volumes:
       - /var/log/bukery:/var/log/bukery:ro
     depends_on:
-      - tower
+      tower:
+        condition: service_healthy
     networks:
       - bukery
 
@@ -76,13 +54,11 @@ services:
       - /etc/letsencrypt:/etc/letsencrypt:ro
     depends_on:
       - tower
-      - n8n
     networks:
       - bukery
 
 volumes:
   tower-data:
-  n8n-data:
 
 networks:
   bukery:

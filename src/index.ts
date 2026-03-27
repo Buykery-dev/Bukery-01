@@ -9,11 +9,11 @@ import { CostTracker } from './core/CostTracker.js';
 import { ControlTower } from './core/ControlTower.js';
 import { DecisionEngine } from './core/DecisionEngine.js';
 import { IssueQueue } from './queue/IssueQueue.js';
+import { GitHubClient } from './github/GitHubClient.js';
 import { TelegramGateway } from './gateway/TelegramGateway.js';
 import { TelegramFormatter } from './gateway/TelegramFormatter.js';
-import { N8nClient } from './n8n/N8nClient.js';
-import { WebhookRoutes } from './n8n/WebhookRoutes.js';
-import { WebhookServer } from './n8n/WebhookServer.js';
+import { WebhookRoutes } from './webhook/WebhookRoutes.js';
+import { WebhookServer } from './webhook/WebhookServer.js';
 import { AlertIngestFlow } from './flows/AlertIngestFlow.js';
 import { PatchFlow } from './flows/PatchFlow.js';
 import { CommandFlow } from './flows/CommandFlow.js';
@@ -24,59 +24,56 @@ async function main(): Promise<void> {
 
   const config = loadConfig();
 
-  // ── 1. Core infrastructure ────────────────────────────────────────────────
-  const registry = new AgentRegistry(config.tower.agents.enabled);
+  // ── 1. 코어 인프라 ─────────────────────────────────────────────────────────
+  const registry    = new AgentRegistry(config.tower.agents.enabled);
   const costTracker = new CostTracker(config.env.COST_LEDGER_PATH, config.tower.budgets, registry);
-  const router = new TaskRouter(registry, costTracker);
-  const executor = new ParallelExecutor(config.tower.routing.maxConcurrent);
-  const evaluator = new ResultEvaluator(config.tower.evaluation.weights);
-  const controlTower = new ControlTower({ registry, router, executor, evaluator, costTracker });
+  const router      = new TaskRouter(registry, costTracker);
+  const executor    = new ParallelExecutor(config.tower.routing.maxConcurrent);
+  const evaluator   = new ResultEvaluator(config.tower.evaluation.weights);
+  const tower       = new ControlTower({ registry, router, executor, evaluator, costTracker });
 
-  // ── 2. Claude Code as the Control Tower brain ─────────────────────────────
+  // ── 2. 판단 엔진 (Claude Code) ─────────────────────────────────────────────
   const decisionEngine = new DecisionEngine();
-  const issueQueue = new IssueQueue(config.tower.issueQueue.persistPath);
+  const issueQueue     = new IssueQueue(config.tower.issueQueue.persistPath);
 
-  // ── 3. Telegram bot instance (shared by gateway + flows) ──────────────────
-  const bot = new TelegramBot(config.env.TELEGRAM_BOT_TOKEN, { polling: false });
-
+  // ── 3. 공유 의존성 ──────────────────────────────────────────────────────────
+  const bot        = new TelegramBot(config.env.TELEGRAM_BOT_TOKEN, { polling: false });
+  const formatter  = new TelegramFormatter();
+  const github     = new GitHubClient();
   const alertChatId = Number(process.env.TELEGRAM_ALERT_CHAT_ID ?? 0);
-  const formatter = new TelegramFormatter();
-  const n8nClient = new N8nClient();
 
-  // ── 4. Agent availability check ───────────────────────────────────────────
+  // ── 4. 에이전트 가용성 확인 ────────────────────────────────────────────────
   const available = await registry.getAvailableAgents();
-  if (available.length === 0) {
-    logger.warn('No agents available — check API keys in .env');
-  } else {
-    logger.info({ agents: available.map((a) => a.metadata.id) }, `${available.length} agent(s) available`);
-  }
+  logger.info(
+    available.length
+      ? { agents: available.map((a) => a.metadata.id) }
+      : { warn: 'No agents — check API keys' },
+    `${available.length} agent(s) available`,
+  );
 
-  // ── 5. Flow orchestrators ─────────────────────────────────────────────────
-  const alertFlow = new AlertIngestFlow(issueQueue, decisionEngine, formatter, bot, n8nClient, alertChatId);
-  const patchFlow = new PatchFlow(issueQueue, decisionEngine, formatter, bot, n8nClient, alertChatId);
-  const commandFlow = new CommandFlow(controlTower, formatter, bot);
+  // ── 5. 플로우 오케스트레이터 ───────────────────────────────────────────────
+  const alertFlow   = new AlertIngestFlow(issueQueue, decisionEngine, formatter, bot, alertChatId);
+  const patchFlow   = new PatchFlow(issueQueue, decisionEngine, formatter, bot, alertChatId);
+  const commandFlow = new CommandFlow(tower, formatter, bot);
 
-  // ── 6. n8n Webhook server ─────────────────────────────────────────────────
-  const webhookPort = config.tower.n8n?.webhookPort ?? config.env.WEBHOOK_PORT ?? 3000;
-  const webhookSecret = process.env.WEBHOOK_SECRET ?? '';
+  // ── 6. Webhook 서버 (OpenClo 수신) ─────────────────────────────────────────
+  const port   = config.tower.n8n?.webhookPort ?? config.env.WEBHOOK_PORT ?? 3000;
+  const secret = process.env.WEBHOOK_SECRET ?? '';
   const routes = new WebhookRoutes(alertFlow, patchFlow, commandFlow);
-  const webhookServer = new WebhookServer(routes, webhookPort, webhookSecret);
+  const webhookServer = new WebhookServer(routes, port, secret);
   webhookServer.start();
 
-  // ── 7. Telegram gateway (manual commands + button callbacks) ──────────────
+  // ── 7. Telegram 게이트웨이 (명령 + 버튼 콜백) ─────────────────────────────
   const gateway = new TelegramGateway(
     config.env.TELEGRAM_BOT_TOKEN,
     config.openclawPath,
-    controlTower,
-    { issueQueue, decisionEngine, n8nClient },
+    tower,
+    { issueQueue, decisionEngine, patchFlow },
   );
 
-  logger.info(
-    { webhookPort, openIssues: issueQueue.getOpen().length },
-    '✅ Control Tower is live',
-  );
+  logger.info({ port, openIssues: issueQueue.getOpen().length }, '✅ Control Tower live');
 
-  // ── 8. Graceful shutdown ──────────────────────────────────────────────────
+  // ── 8. 종료 처리 ───────────────────────────────────────────────────────────
   const shutdown = (): void => {
     logger.info('Shutting down...');
     gateway.stop();
@@ -84,7 +81,6 @@ async function main(): Promise<void> {
     logger.info(costTracker.getDailySummary());
     process.exit(0);
   };
-
   process.on('SIGINT', shutdown);
   process.on('SIGTERM', shutdown);
 }

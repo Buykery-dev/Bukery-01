@@ -1,50 +1,35 @@
 import TelegramBot from 'node-telegram-bot-api';
 import type { IssueQueue } from '../queue/IssueQueue.js';
 import type { DecisionEngine } from '../core/DecisionEngine.js';
-import type { N8nClient } from '../n8n/N8nClient.js';
+import type { PatchFlow } from '../flows/PatchFlow.js';
+import { CoworkDelegator } from '../cowork/CoworkDelegator.js';
 import { logger } from '../utils/logger.js';
 
-/**
- * Handles Telegram inline keyboard button callbacks.
- *
- * Button actions registered here:
- *   codex_patch:<issueId>      — user requests Codex to generate a patch
- *   cowork_review:<issueId>    — user requests a human-facing code review
- *   approve_patch:<issueId>    — user approves patch → trigger merge via n8n
- *   reject_patch:<issueId>     — user rejects patch → re-open issue
- *   close_issue:<issueId>      — user closes issue without action
- *
- * Policy: no action here modifies production code directly.
- * All code changes are triggered via n8n, which requires PR creation
- * and a separate human merge approval step.
- */
 export class CallbackQueryHandler {
   constructor(
     private bot: TelegramBot,
     private issueQueue: IssueQueue,
     private decisionEngine: DecisionEngine,
-    private n8nClient: N8nClient,
+    private patchFlow: PatchFlow,
   ) {}
 
   register(): void {
     this.bot.on('callback_query', async (query) => {
       if (!query.data) return;
-
       const colonIdx = query.data.indexOf(':');
       if (colonIdx === -1) return;
 
-      const action = query.data.slice(0, colonIdx);
+      const action  = query.data.slice(0, colonIdx);
       const issueId = query.data.slice(colonIdx + 1);
-      const chatId = query.message?.chat.id;
+      const chatId  = query.message?.chat.id;
 
       try {
         await this.dispatch(action, issueId, chatId, query);
         await this.bot.answerCallbackQuery(query.id);
       } catch (err) {
-        logger.error({ err, action, issueId }, 'Callback query handler error');
+        logger.error({ err, action, issueId }, 'Callback query error');
         await this.bot.answerCallbackQuery(query.id, {
-          text: 'Error processing action — check logs',
-          show_alert: true,
+          text: 'Error — check logs', show_alert: true,
         });
       }
     });
@@ -64,16 +49,24 @@ export class CallbackQueryHandler {
         await this.handleCoworkReview(issueId, chatId);
         break;
       case 'approve_patch':
-        await this.handleApprovePatch(issueId, chatId, query);
+        await this.patchFlow.handleDecision({
+          issueId, approved: true, approvedBy: query.from.username,
+        });
+        if (chatId) await this.bot.sendMessage(chatId,
+          `✅ 머지 완료 \\(@${query.from.username ?? query.from.id}\\)`,
+          { parse_mode: 'MarkdownV2' });
         break;
       case 'reject_patch':
-        await this.handleRejectPatch(issueId, chatId, query);
+        await this.patchFlow.handleDecision({ issueId, approved: false });
+        if (chatId) await this.bot.sendMessage(chatId, `패치 거절 — 이슈 재오픈됨`);
         break;
       case 'close_issue':
-        await this.handleCloseIssue(issueId, chatId);
+        this.issueQueue.updateStatus(issueId, 'closed');
+        if (chatId) await this.bot.sendMessage(chatId, `Issue \`${issueId}\` closed\\.`,
+          { parse_mode: 'MarkdownV2' });
         break;
       default:
-        logger.warn({ action, issueId }, 'Unknown callback action');
+        logger.warn({ action }, 'Unknown callback action');
     }
   }
 
@@ -85,94 +78,39 @@ export class CallbackQueryHandler {
     const issue = this.issueQueue.getById(issueId);
     if (!issue || !chatId) return;
 
-    // Claude Code decides if patching is appropriate
     const decision = await this.decisionEngine.analyseIssue(issue);
 
-    if (decision.assignTo !== 'codex' && decision.assignTo !== 'claude-code') {
-      await this.bot.sendMessage(
-        chatId,
-        `Claude Code recommends: *${decision.recommendedAction}*\n\nNot routing to Codex: ${decision.summary}`,
-        { parse_mode: 'MarkdownV2' },
-      );
+    if (!['codex', 'claude-code'].includes(decision.assignTo)) {
+      await this.bot.sendMessage(chatId,
+        `Claude Code 판단: ${decision.recommendedAction}\n→ Codex 미적합: ${decision.summary}`);
       return;
     }
 
-    // Trigger n8n Codex Patch Flow
-    await this.n8nClient.triggerPatchFlow(issue, decision);
-    this.issueQueue.updateStatus(issueId, 'patch_requested', { decision });
+    // PatchFlow가 Codex 직접 호출 + GitHub PR + Telegram 알림 처리
+    await this.bot.sendMessage(chatId, `⚙️ Codex 패치 생성 중\\.\\.\\.`, { parse_mode: 'MarkdownV2' });
+    this.patchFlow.requestPatch(issueId).catch((e) =>
+      logger.error({ e, issueId }, 'requestPatch error'));
 
-    await this.bot.sendMessage(
-      chatId,
-      `Codex patch task queued for issue \`${issueId}\`\\. I'll notify when the PR is ready\\.`,
-      { parse_mode: 'MarkdownV2' },
-    );
-
-    logger.info({ issueId, by: query.from.username }, 'Codex patch flow triggered');
+    logger.info({ issueId, by: query.from.username }, 'Codex patch requested');
   }
 
   private async handleCoworkReview(issueId: string, chatId: number | undefined): Promise<void> {
     const issue = this.issueQueue.getById(issueId);
     if (!issue || !chatId) return;
 
-    await this.n8nClient.triggerReviewFlow(issue);
-    await this.bot.sendMessage(
-      chatId,
-      `Cowork review request sent for issue \`${issueId}\`\\.`,
-      { parse_mode: 'MarkdownV2' },
-    );
-  }
+    const delegator = new CoworkDelegator();
+    const result = await delegator.delegate({
+      reason:   'escalate',
+      issue,
+      decision: issue.decision,
+      context:  issue.observability.recentLogs.slice(-10).join('\n'),
+      urgency:  'normal',
+    });
 
-  private async handleApprovePatch(
-    issueId: string,
-    chatId: number | undefined,
-    query: TelegramBot.CallbackQuery,
-  ): Promise<void> {
-    const issue = this.issueQueue.getById(issueId);
-    if (!issue || !chatId) return;
+    const msg = result.githubIssueUrl
+      ? `👀 Cowork 리뷰 요청 완료\\. Issue: ${result.githubIssueUrl}`
+      : `👀 Cowork 알림 전송 완료 \\(GitHub 미설정\\)`;
 
-    if (!issue.patchPrUrl) {
-      await this.bot.sendMessage(chatId, 'No PR URL on record for this issue\\.', {
-        parse_mode: 'MarkdownV2',
-      });
-      return;
-    }
-
-    // Trigger merge via n8n — n8n will call GitHub API to merge the PR
-    await this.n8nClient.triggerMergeFlow(issueId, issue.patchPrUrl, query.from.id);
-    this.issueQueue.updateStatus(issueId, 'approved');
-
-    await this.bot.sendMessage(
-      chatId,
-      `✅ Merge triggered for issue \`${issueId}\`\\. Approved by @${query.from.username ?? query.from.id}\\.`,
-      { parse_mode: 'MarkdownV2' },
-    );
-
-    logger.info({ issueId, by: query.from.username }, 'Patch merge triggered');
-  }
-
-  private async handleRejectPatch(
-    issueId: string,
-    chatId: number | undefined,
-    query: TelegramBot.CallbackQuery,
-  ): Promise<void> {
-    this.issueQueue.updateStatus(issueId, 'open');
-    await this.n8nClient.notifyPatchRejected(issueId, query.from.id);
-
-    if (chatId) {
-      await this.bot.sendMessage(
-        chatId,
-        `Patch rejected by @${query.from.username ?? query.from.id}\\. Issue re\\-opened\\.`,
-        { parse_mode: 'MarkdownV2' },
-      );
-    }
-  }
-
-  private async handleCloseIssue(issueId: string, chatId: number | undefined): Promise<void> {
-    this.issueQueue.updateStatus(issueId, 'closed');
-    if (chatId) {
-      await this.bot.sendMessage(chatId, `Issue \`${issueId}\` closed\\.`, {
-        parse_mode: 'MarkdownV2',
-      });
-    }
+    await this.bot.sendMessage(chatId, msg, { parse_mode: 'MarkdownV2' });
   }
 }
