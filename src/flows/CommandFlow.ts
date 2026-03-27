@@ -7,7 +7,7 @@ import TelegramBot from 'node-telegram-bot-api';
 /**
  * CommandFlow
  *
- * Handles manual Telegram commands forwarded by n8n.
+ * Handles manual Telegram commands forwarded via webhook.
  * Claude Code (via ControlTower) decides routing and executes the task.
  */
 export class CommandFlow {

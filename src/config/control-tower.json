@@ -46,14 +46,8 @@
       "total": 50.00
     }
   },
-  "n8n": {
-    "webhookPort": 3000,
-    "webhookSecret": "${WEBHOOK_SECRET}",
-    "flows": {
-      "alertToIssue":   "src/n8n/workflows/alert-to-issue.workflow.json",
-      "codexPatch":     "src/n8n/workflows/codex-patch.workflow.json",
-      "manualTask":     "src/n8n/workflows/manual-task.workflow.json"
-    }
+  "webhook": {
+    "port": 3000
   },
   "issueQueue": {
     "persistPath": "./issue-queue.json",

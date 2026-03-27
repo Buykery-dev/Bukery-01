@@ -3,7 +3,7 @@ import type { WebhookRoutes } from './WebhookRoutes.js';
 import { logger } from '../utils/logger.js';
 
 /**
- * WebhookServer — lightweight HTTP server receiving inbound n8n/OpenClo calls.
+ * WebhookServer — lightweight HTTP server receiving inbound OpenClo calls.
  *
  * Security: validates X-Webhook-Secret header on every request.
  * All routing is delegated to WebhookRoutes.
@@ -26,7 +26,7 @@ export class WebhookServer {
 
   start(): void {
     this.server.listen(this.port, () => {
-      logger.info({ port: this.port }, 'n8n webhook server listening');
+      logger.info({ port: this.port }, 'Webhook server listening');
     });
   }
 

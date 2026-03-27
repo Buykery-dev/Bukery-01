@@ -10,14 +10,14 @@ import type { CommandFlow } from '../flows/CommandFlow.js';
 import { logger } from '../utils/logger.js';
 
 /**
- * WebhookRoutes — dispatch table for all inbound n8n / OpenClo webhook calls.
+ * WebhookRoutes — dispatch table for all inbound OpenClo webhook calls.
  *
  * Routes:
- *   POST /webhook/alert              ← OpenClo error alert
- *   POST /webhook/codex-patch-complete ← n8n Codex Patch Flow done
- *   POST /webhook/patch-decision     ← human approve/reject from Telegram button
- *   POST /webhook/task               ← manual Telegram command forwarded by n8n
- *   GET  /webhook/health             ← health check
+ *   POST /webhook/alert                ← OpenClo error alert
+ *   POST /webhook/codex-patch-complete ← Codex patch done
+ *   POST /webhook/patch-decision       ← human approve/reject from Telegram button
+ *   POST /webhook/task                 ← manual Telegram command
+ *   GET  /webhook/health               ← health check
  */
 export class WebhookRoutes {
   constructor(

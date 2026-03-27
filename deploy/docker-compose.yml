@@ -46,14 +46,19 @@ services:
   nginx:
     image: nginx:alpine
     restart: unless-stopped
+    environment:
+      TOWER_DOMAIN: ${TOWER_DOMAIN:-tower.example.com}
     ports:
       - "80:80"
       - "443:443"
     volumes:
-      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx.conf.template:/etc/nginx/templates/default.conf.template:ro
       - /etc/letsencrypt:/etc/letsencrypt:ro
+    # nginx:alpine with /etc/nginx/templates/ support: files are envsubst'd on start
+    # See: https://hub.docker.com/_/nginx  "Using environment variables in nginx configuration"
     depends_on:
-      - tower
+      tower:
+        condition: service_healthy
     networks:
       - bukery
 

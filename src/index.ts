@@ -57,7 +57,7 @@ async function main(): Promise<void> {
   const commandFlow = new CommandFlow(tower, formatter, bot);
 
   // ── 6. Webhook 서버 (OpenClo 수신) ─────────────────────────────────────────
-  const port   = config.tower.n8n?.webhookPort ?? config.env.WEBHOOK_PORT ?? 3000;
+  const port   = config.tower.webhook?.port ?? config.env.WEBHOOK_PORT ?? 3000;
   const secret = process.env.WEBHOOK_SECRET ?? '';
   const routes = new WebhookRoutes(alertFlow, patchFlow, commandFlow);
   const webhookServer = new WebhookServer(routes, port, secret);

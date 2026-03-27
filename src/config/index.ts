@@ -27,7 +27,7 @@ interface TowerConfig {
   routing: { defaultMode: string; maxConcurrent: number };
   evaluation: { weights: EvaluationWeights };
   budgets: BudgetConfig;
-  n8n?: { webhookPort?: number; webhookSecret?: string };
+  webhook?: { port?: number };
   issueQueue: { persistPath: string; cooldownMs: number; maxRetries: number };
   observability: { recentLogLines: number; alertSeverityThreshold: string };
 }

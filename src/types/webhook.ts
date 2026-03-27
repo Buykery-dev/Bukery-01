@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-/** Payload POSTed by OpenClo (or n8n) to /webhook/alert */
+/** Payload POSTed by OpenClo to /webhook/alert */
 export const OpenCloAlertSchema = z.object({
   alertId:          z.string().optional(),
   serviceName:      z.string(),
@@ -15,7 +15,7 @@ export const OpenCloAlertSchema = z.object({
 
 export type OpenCloAlertPayload = z.infer<typeof OpenCloAlertSchema>;
 
-/** Payload POSTed by n8n after Codex finishes generating a patch */
+/** Payload POSTed after Codex finishes generating a patch */
 export const CodexPatchCompleteSchema = z.object({
   issueId:      z.string(),
   patchTaskId:  z.string(),
@@ -30,7 +30,7 @@ export const CodexPatchCompleteSchema = z.object({
 
 export type CodexPatchCompletePayload = z.infer<typeof CodexPatchCompleteSchema>;
 
-/** Payload from Telegram button → n8n → /webhook/patch-decision */
+/** Payload from Telegram button → /webhook/patch-decision */
 export const PatchDecisionSchema = z.object({
   issueId:       z.string(),
   approved:      z.boolean(),
@@ -40,7 +40,7 @@ export const PatchDecisionSchema = z.object({
 
 export type PatchDecisionPayload = z.infer<typeof PatchDecisionSchema>;
 
-/** Generic Telegram command forwarded by n8n to /webhook/task */
+/** Generic Telegram command forwarded to /webhook/task */
 export const TelegramTaskSchema = z.object({
   prompt:    z.string(),
   chatId:    z.number(),
