@@ -3,6 +3,10 @@ import TelegramBot from 'node-telegram-bot-api';
 import type { AgentId, ExecutionMode, TaskType } from '../types/agent.js';
 import { ControlTower } from '../core/ControlTower.js';
 import { TelegramFormatter } from './TelegramFormatter.js';
+import { CallbackQueryHandler } from './CallbackQueryHandler.js';
+import type { IssueQueue } from '../queue/IssueQueue.js';
+import type { DecisionEngine } from '../core/DecisionEngine.js';
+import type { N8nClient } from '../n8n/N8nClient.js';
 import { logger } from '../utils/logger.js';
 
 interface OpenclawConfig {
@@ -20,17 +24,39 @@ interface ParsedCommand {
   prompt: string;
 }
 
+export interface TelegramGatewayDeps {
+  issueQueue: IssueQueue;
+  decisionEngine: DecisionEngine;
+  n8nClient: N8nClient;
+}
+
 export class TelegramGateway {
   private bot: TelegramBot;
   private allowedGroups: Set<string>;
   private controlTower: ControlTower;
   private formatter: TelegramFormatter;
 
-  constructor(token: string, openclawPath: string, controlTower: ControlTower) {
+  constructor(
+    token: string,
+    openclawPath: string,
+    controlTower: ControlTower,
+    deps?: TelegramGatewayDeps,
+  ) {
     this.bot = new TelegramBot(token, { polling: true });
     this.allowedGroups = this.loadAllowedGroups(openclawPath);
     this.controlTower = controlTower;
     this.formatter = new TelegramFormatter();
+
+    // Register inline keyboard button handler if deps provided
+    if (deps) {
+      const callbackHandler = new CallbackQueryHandler(
+        this.bot,
+        deps.issueQueue,
+        deps.decisionEngine,
+        deps.n8nClient,
+      );
+      callbackHandler.register();
+    }
 
     logger.info({ groups: [...this.allowedGroups] }, 'Telegram gateway initialised');
     this.registerHandlers();

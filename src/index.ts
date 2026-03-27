@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import TelegramBot from 'node-telegram-bot-api';
 import { loadConfig } from './config/index.js';
 import { AgentRegistry } from './agents/AgentRegistry.js';
 import { TaskRouter } from './core/TaskRouter.js';
@@ -10,9 +11,12 @@ import { DecisionEngine } from './core/DecisionEngine.js';
 import { IssueQueue } from './queue/IssueQueue.js';
 import { TelegramGateway } from './gateway/TelegramGateway.js';
 import { TelegramFormatter } from './gateway/TelegramFormatter.js';
+import { N8nClient } from './n8n/N8nClient.js';
+import { WebhookRoutes } from './n8n/WebhookRoutes.js';
 import { WebhookServer } from './n8n/WebhookServer.js';
-import type { IssueObservability } from './types/issue.js';
-import type { PatchDecisionPayload } from './n8n/WebhookServer.js';
+import { AlertIngestFlow } from './flows/AlertIngestFlow.js';
+import { PatchFlow } from './flows/PatchFlow.js';
+import { CommandFlow } from './flows/CommandFlow.js';
 import { logger } from './utils/logger.js';
 
 async function main(): Promise<void> {
@@ -20,96 +24,59 @@ async function main(): Promise<void> {
 
   const config = loadConfig();
 
-  // ── Core infrastructure ───────────────────────────────────────────────────
+  // ── 1. Core infrastructure ────────────────────────────────────────────────
   const registry = new AgentRegistry(config.tower.agents.enabled);
-  const costTracker = new CostTracker(
-    config.env.COST_LEDGER_PATH,
-    config.tower.budgets,
-    registry,
-  );
+  const costTracker = new CostTracker(config.env.COST_LEDGER_PATH, config.tower.budgets, registry);
   const router = new TaskRouter(registry, costTracker);
   const executor = new ParallelExecutor(config.tower.routing.maxConcurrent);
   const evaluator = new ResultEvaluator(config.tower.evaluation.weights);
+  const controlTower = new ControlTower({ registry, router, executor, evaluator, costTracker });
 
-  // ── Claude Code as the Control Tower brain ────────────────────────────────
+  // ── 2. Claude Code as the Control Tower brain ─────────────────────────────
   const decisionEngine = new DecisionEngine();
   const issueQueue = new IssueQueue(config.tower.issueQueue.persistPath);
 
-  const controlTower = new ControlTower({
-    registry,
-    router,
-    executor,
-    evaluator,
-    costTracker,
-  });
+  // ── 3. Telegram bot instance (shared by gateway + flows) ──────────────────
+  const bot = new TelegramBot(config.env.TELEGRAM_BOT_TOKEN, { polling: false });
 
-  // ── Agent availability check ──────────────────────────────────────────────
+  const alertChatId = Number(process.env.TELEGRAM_ALERT_CHAT_ID ?? 0);
+  const formatter = new TelegramFormatter();
+  const n8nClient = new N8nClient();
+
+  // ── 4. Agent availability check ───────────────────────────────────────────
   const available = await registry.getAvailableAgents();
   if (available.length === 0) {
     logger.warn('No agents available — check API keys in .env');
   } else {
-    logger.info(
-      { agents: available.map((a) => a.metadata.id) },
-      `${available.length} agent(s) available`,
-    );
+    logger.info({ agents: available.map((a) => a.metadata.id) }, `${available.length} agent(s) available`);
   }
 
-  // ── Telegram formatter (shared) ───────────────────────────────────────────
-  const formatter = new TelegramFormatter();
+  // ── 5. Flow orchestrators ─────────────────────────────────────────────────
+  const alertFlow = new AlertIngestFlow(issueQueue, decisionEngine, formatter, bot, n8nClient, alertChatId);
+  const patchFlow = new PatchFlow(issueQueue, decisionEngine, formatter, bot, n8nClient, alertChatId);
+  const commandFlow = new CommandFlow(controlTower, formatter, bot);
 
-  // ── n8n Webhook server ────────────────────────────────────────────────────
-  const webhookServer = new WebhookServer(
-    {
-      issueQueue,
-      decisionEngine,
+  // ── 6. n8n Webhook server ─────────────────────────────────────────────────
+  const webhookPort = config.tower.n8n?.webhookPort ?? config.env.WEBHOOK_PORT ?? 3000;
+  const webhookSecret = process.env.WEBHOOK_SECRET ?? '';
+  const routes = new WebhookRoutes(alertFlow, patchFlow, commandFlow);
+  const webhookServer = new WebhookServer(routes, webhookPort, webhookSecret);
+  webhookServer.start();
 
-      async onNewIssue(obs: IssueObservability): Promise<void> {
-        const issue = issueQueue.upsert(obs);
-        if (!issue) return;  // suppressed by cooldown
-
-        // Claude Code analyses the issue and decides next action
-        issueQueue.updateStatus(issue.id, 'analyzing');
-        const decision = await decisionEngine.analyseIssue(issue);
-        issueQueue.updateStatus(issue.id, 'patch_requested', { decision });
-
-        // Format and send Telegram alert
-        const { text, replyMarkup } = formatter.formatIssueAlert({
-          ...issue,
-          decision,
-        });
-        logger.info({ issueId: issue.id, assignTo: decision.assignTo }, 'Alert sent to Telegram');
-        logger.debug({ text, replyMarkup }, 'Telegram alert payload');
-      },
-
-      async onPatchDecision(payload: PatchDecisionPayload): Promise<void> {
-        const issue = issueQueue.getById(payload.issueId);
-        if (!issue) return;
-
-        if (payload.approved) {
-          issueQueue.updateStatus(payload.issueId, 'approved');
-          logger.info({ issueId: payload.issueId, by: payload.approvedBy }, 'Patch approved');
-        } else {
-          issueQueue.updateStatus(payload.issueId, 'open');
-          logger.info({ issueId: payload.issueId }, 'Patch rejected — re-opened');
-        }
-      },
-    },
-    config.tower.n8n?.webhookPort ?? 3000,
-  );
-
-  // ── Telegram gateway (manual commands from allowed group) ─────────────────
+  // ── 7. Telegram gateway (manual commands + button callbacks) ──────────────
   const gateway = new TelegramGateway(
     config.env.TELEGRAM_BOT_TOKEN,
     config.openclawPath,
     controlTower,
+    { issueQueue, decisionEngine, n8nClient },
   );
 
-  logger.info({
-    webhookPort: config.tower.n8n?.webhookPort ?? 3000,
-    openIssues: issueQueue.getOpen().length,
-  }, '✅ Control Tower is live');
+  logger.info(
+    { webhookPort, openIssues: issueQueue.getOpen().length },
+    '✅ Control Tower is live',
+  );
 
-  // ── Graceful shutdown ─────────────────────────────────────────────────────
+  // ── 8. Graceful shutdown ──────────────────────────────────────────────────
   const shutdown = (): void => {
     logger.info('Shutting down...');
     gateway.stop();
