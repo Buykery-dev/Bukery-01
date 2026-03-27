@@ -1,0 +1,9 @@
+{
+  "channels": {
+    "telegram": {
+      "groupAllowFrom": [
+        "-3676193070"
+      ]
+    }
+  }
+}
