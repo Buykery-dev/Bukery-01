@@ -1,0 +1,8 @@
+FROM node:22-alpine
+WORKDIR /app
+RUN npm install -g tsx
+COPY package*.json ./
+RUN npm ci
+COPY openclo/ ./openclo/
+COPY src/monitor/ ./src/monitor/
+CMD ["tsx", "openclo/agent.ts"]

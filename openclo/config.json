@@ -1,0 +1,12 @@
+{
+  "serviceName": "bukery-app",
+  "logPath": "/var/log/bukery/app.log",
+  "pollIntervalMs": 5000,
+  "bufferLines": 50,
+  "alertCooldownMs": 30000,
+  "patterns": {
+    "critical": ["crash", "fatal", "oom", "out of memory", "unhandled rejection"],
+    "high":     ["error", "exception", "failed", "timeout", "econnrefused", "500"],
+    "medium":   ["warn", "warning", "deprecated", "slow query"]
+  }
+}

@@ -5,6 +5,7 @@ import { IssueQueue } from '../queue/IssueQueue.js';
 import { DecisionEngine } from '../core/DecisionEngine.js';
 import { TelegramFormatter } from '../gateway/TelegramFormatter.js';
 import { N8nClient } from '../n8n/N8nClient.js';
+import { CoworkDelegator } from '../cowork/CoworkDelegator.js';
 import { logger } from '../utils/logger.js';
 import TelegramBot from 'node-telegram-bot-api';
 
@@ -54,6 +55,18 @@ export class AlertIngestFlow {
     this.issueQueue.updateStatus(issue.id, 'analyzing');
     const decision = await this.decisionEngine.analyseIssue(issue);
     this.issueQueue.updateStatus(issue.id, 'patch_requested', { decision });
+
+    // 자동 위임: escalate 또는 critical + human approval 필요 시 Cowork으로
+    if (decision.requiresHumanApproval && obs.severity === 'critical') {
+      const delegator = new CoworkDelegator();
+      delegator.delegate({
+        reason: 'escalate',
+        issue: { ...issue, decision },
+        decision,
+        context: obs.recentLogs.slice(-10).join('\n'),
+        urgency: 'immediate',
+      }).catch((e) => logger.error({ e }, 'Cowork delegation failed'));
+    }
 
     // Send structured Telegram alert with action buttons
     const { text, replyMarkup } = this.formatter.formatIssueAlert({ ...issue, decision });

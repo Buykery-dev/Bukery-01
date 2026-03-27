@@ -1,0 +1,51 @@
+name: Deploy to Lightsail
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run build
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy to Lightsail
+        uses: appleboy/ssh-action@v1
+        with:
+          host:     ${{ secrets.LIGHTSAIL_HOST }}
+          username: ${{ secrets.LIGHTSAIL_USER }}
+          key:      ${{ secrets.LIGHTSAIL_SSH_KEY }}
+          script: |
+            cd /opt/bukery-01
+            git pull origin main
+            export COMMIT_HASH=${{ github.sha }}
+            export DEPLOY_VERSION=${{ github.ref_name }}
+            bash deploy/scripts/deploy.sh
+
+      - name: Notify Telegram on success
+        if: success()
+        run: |
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+            -d "chat_id=${{ secrets.TELEGRAM_ALERT_CHAT_ID }}" \
+            -d "text=✅ Deployed $(echo ${{ github.sha }} | cut -c1-7) to Lightsail"
+
+      - name: Notify Telegram on failure
+        if: failure()
+        run: |
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+            -d "chat_id=${{ secrets.TELEGRAM_ALERT_CHAT_ID }}" \
+            -d "text=❌ Deploy failed: ${{ github.sha }} — check Actions"
