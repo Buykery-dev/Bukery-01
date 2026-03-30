@@ -1,5 +1,5 @@
 import type { IssueObservability } from '../types/issue.js';
-import type { OpenCloAlertPayload } from '../types/webhook.js';
+import type { NanoclawAlertPayload } from '../types/webhook.js';
 import { fingerprint, classifySeverity } from '../monitor/ErrorFingerprint.js';
 import { IssueQueue } from '../queue/IssueQueue.js';
 import { DecisionEngine } from '../core/DecisionEngine.js';
@@ -11,7 +11,7 @@ import TelegramBot from 'node-telegram-bot-api';
 /**
  * AlertIngestFlow
  *
- * Pipeline: OpenClo alert → fingerprint → dedup → Claude Code analysis → Telegram
+ * Pipeline: Nanoclaw alert → fingerprint → dedup → Claude Code analysis → Telegram
  *
  * Claude Code is the ONLY decision maker here.  This flow never modifies code.
  * It only: analyses, classifies, queues, and notifies.
@@ -25,7 +25,7 @@ export class AlertIngestFlow {
     private alertChatId: number,
   ) {}
 
-  async handle(payload: OpenCloAlertPayload): Promise<{ issueId: string | null; status: string }> {
+  async handle(payload: NanoclawAlertPayload): Promise<{ issueId: string | null; status: string }> {
     const fp = fingerprint(payload.errorMessage, payload.stackTrace);
     const severity = payload.severity ?? classifySeverity(payload.errorMessage);
 

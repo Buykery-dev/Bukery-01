@@ -3,6 +3,6 @@ WORKDIR /app
 RUN npm install -g tsx
 COPY package*.json ./
 RUN npm ci
-COPY openclo/ ./openclo/
+COPY nanoclaw/ ./nanoclaw/
 COPY src/monitor/ ./src/monitor/
-CMD ["tsx", "openclo/agent.ts"]
+CMD ["tsx", "nanoclaw/agent.ts"]

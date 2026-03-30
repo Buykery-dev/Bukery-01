@@ -56,7 +56,7 @@ async function main(): Promise<void> {
   const patchFlow   = new PatchFlow(issueQueue, decisionEngine, formatter, bot, alertChatId);
   const commandFlow = new CommandFlow(tower, formatter, bot);
 
-  // ── 6. Webhook 서버 (OpenClo 수신) ─────────────────────────────────────────
+  // ── 6. Webhook 서버 (Nanoclaw 수신) ─────────────────────────────────────────
   const port   = config.tower.webhook?.port ?? config.env.WEBHOOK_PORT ?? 3000;
   const secret = process.env.WEBHOOK_SECRET ?? '';
   const routes = new WebhookRoutes(alertFlow, patchFlow, commandFlow);

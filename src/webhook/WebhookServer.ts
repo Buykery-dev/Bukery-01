@@ -3,7 +3,7 @@ import type { WebhookRoutes } from './WebhookRoutes.js';
 import { logger } from '../utils/logger.js';
 
 /**
- * WebhookServer — lightweight HTTP server receiving inbound OpenClo calls.
+ * WebhookServer — lightweight HTTP server receiving inbound Nanoclaw calls.
  *
  * Security: validates X-Webhook-Secret header on every request.
  * All routing is delegated to WebhookRoutes.

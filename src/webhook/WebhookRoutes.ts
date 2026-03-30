@@ -1,5 +1,5 @@
 import {
-  OpenCloAlertSchema,
+  NanoclawAlertSchema,
   CodexPatchCompleteSchema,
   PatchDecisionSchema,
   TelegramTaskSchema,
@@ -10,10 +10,10 @@ import type { CommandFlow } from '../flows/CommandFlow.js';
 import { logger } from '../utils/logger.js';
 
 /**
- * WebhookRoutes — dispatch table for all inbound OpenClo webhook calls.
+ * WebhookRoutes — dispatch table for all inbound Nanoclaw webhook calls.
  *
  * Routes:
- *   POST /webhook/alert                ← OpenClo error alert
+ *   POST /webhook/alert                ← Nanoclaw error alert
  *   POST /webhook/codex-patch-complete ← Codex patch done
  *   POST /webhook/patch-decision       ← human approve/reject from Telegram button
  *   POST /webhook/task                 ← manual Telegram command
@@ -39,7 +39,7 @@ export class WebhookRoutes {
 
     switch (path) {
       case '/webhook/alert': {
-        const payload = OpenCloAlertSchema.parse(body);
+        const payload = NanoclawAlertSchema.parse(body);
         return this.alertFlow.handle(payload);
       }
       case '/webhook/codex-patch-complete': {

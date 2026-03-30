@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
-/** Payload POSTed by OpenClo to /webhook/alert */
-export const OpenCloAlertSchema = z.object({
+/** Payload POSTed by Nanoclaw to /webhook/alert */
+export const NanoclawAlertSchema = z.object({
   alertId:          z.string().optional(),
   serviceName:      z.string(),
   errorMessage:     z.string(),
@@ -13,7 +13,7 @@ export const OpenCloAlertSchema = z.object({
   severity:         z.enum(['critical', 'high', 'medium', 'low']).optional(),
 });
 
-export type OpenCloAlertPayload = z.infer<typeof OpenCloAlertSchema>;
+export type NanoclawAlertPayload = z.infer<typeof NanoclawAlertSchema>;
 
 /** Payload POSTed after Codex finishes generating a patch */
 export const CodexPatchCompleteSchema = z.object({

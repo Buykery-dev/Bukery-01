@@ -30,7 +30,7 @@ jobs:
           username: ${{ secrets.LIGHTSAIL_USER }}
           key:      ${{ secrets.LIGHTSAIL_SSH_KEY }}
           script: |
-            cd /opt/bukery-01
+            cd /opt/Buykery_root
             git pull origin main
             export COMMIT_HASH=${{ github.sha }}
             export DEPLOY_VERSION=${{ github.ref_name }}

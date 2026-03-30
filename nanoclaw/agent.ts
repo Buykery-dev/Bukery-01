@@ -1,7 +1,7 @@
 /**
- * OpenClo Agent — 24h 로그 감시 + 이상 탐지 + Control Tower 알림
+ * Nanoclaw Agent — 24h 로그 감시 + 이상 탐지 + Control Tower 알림
  *
- * 실행: tsx openclo/agent.ts
+ * 실행: tsx nanoclaw/agent.ts
  * 역할: 로그 tail → 에러 감지 → fingerprint → POST /webhook/alert
  * 정책: 감지 + 알림만. 코드 수정 절대 없음.
  */
@@ -54,9 +54,9 @@ async function sendAlert(errorLine: string, severity: string): Promise<void> {
       },
       body: JSON.stringify(payload),
     });
-    console.log(`[openclo] alert sent → ${res.status} (${severity}): ${errorLine.slice(0, 80)}`);
+    console.log(`[nanoclaw] alert sent → ${res.status} (${severity}): ${errorLine.slice(0, 80)}`);
   } catch (e) {
-    console.error('[openclo] failed to send alert:', e);
+    console.error('[nanoclaw] failed to send alert:', e);
   }
 }
 
@@ -95,7 +95,7 @@ async function tailNewLines(): Promise<void> {
 }
 
 async function run(): Promise<void> {
-  console.log(`[openclo] watching ${LOG_PATH} → ${CONTROL_TOWER_URL}`);
+  console.log(`[nanoclaw] watching ${LOG_PATH} → ${CONTROL_TOWER_URL}`);
   // 초기 위치 설정 (기존 로그 무시, 신규 로그만 감시)
   if (existsSync(LOG_PATH)) {
     lastSize = statSync(LOG_PATH).size;
@@ -105,7 +105,7 @@ async function run(): Promise<void> {
     try {
       await tailNewLines();
     } catch (e) {
-      console.error('[openclo] poll error:', e);
+      console.error('[nanoclaw] poll error:', e);
     }
     setTimeout(loop, POLL_INTERVAL_MS);
   };

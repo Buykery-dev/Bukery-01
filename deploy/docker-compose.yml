@@ -21,11 +21,11 @@ services:
     networks:
       - bukery
 
-  # ── OpenClo 감시 에이전트 ──────────────────────────────────────────────────
-  openclo:
+  # ── Nanoclaw 감시 에이전트 ──────────────────────────────────────────────────
+  nanoclaw:
     build:
       context: ..
-      dockerfile: deploy/Dockerfile.openclo
+      dockerfile: deploy/Dockerfile.nanoclaw
     restart: unless-stopped
     environment:
       CONTROL_TOWER_URL: http://tower:3000

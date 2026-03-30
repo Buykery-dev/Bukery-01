@@ -25,7 +25,7 @@ export class IssueQueue {
   }
 
   /**
-   * Add or update an issue from an OpenClo alert.
+   * Add or update an issue from an Nanoclaw alert.
    * Returns:
    *   - the issue object if it's new or should re-alert
    *   - null if it's a duplicate within the cooldown window
